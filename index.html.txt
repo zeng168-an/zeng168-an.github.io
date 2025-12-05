@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>YOLO 目标检测</title>
+    <style>
+        body { max-width: 1200px; margin: 0 auto; padding: 20px; font-family: Arial; }
+        #imageInput { margin: 20px 0; }
+        button { padding: 10px 20px; background: #4285F4; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        #result { margin-top: 20px; }
+        canvas { border: 1px solid #eee; max-width: 100%; }
+    </style>
+</head>
+<body>
+    <h1>YOLO 目标检测演示</h1>
+    <input type="file" id="imageInput" accept="image/jpeg,image/png,image/jpg">
+    <button onclick="uploadImage()">开始检测</button>
+    <div id="result"></div>
+
+    <script>
+        async function uploadImage() {
+            const fileInput = document.getElementById('imageInput');
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = "检测中...";
+
+            if (!fileInput.files[0]) {
+                resultDiv.innerHTML = "请先选择图片！";
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                // 发送检测请求
+                const response = await fetch('/detect', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) throw new Error('检测失败');
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+
+                // 显示图片和检测结果
+                await displayResult(file, data.results);
+            } catch (e) {
+                resultDiv.innerHTML = `错误：${e.message}`;
+            }
+        }
+
+        function displayResult(file, results) {
+            const resultDiv = document.getElementById('result');
+            const img = new Image();
+            img.onload = function() {
+                // 创建 Canvas
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = img.width;
+                canvas.height = img.height;
+
+                // 绘制原始图片
+                ctx.drawImage(img, 0, 0);
+
+                // 绘制检测框和标签
+                const colors = getColors(results.length); // 生成不同颜色
+                results.forEach((item, index) => {
+                    const [x1, y1, x2, y2] = item.box;
+                    const color = colors[index];
+
+                    // 绘制矩形框
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+                    // 绘制标签背景
+                    ctx.fillStyle = color;
+                    const label = `${item.class} (${item.confidence})`;
+                    ctx.font = '16px Arial';
+                    const textWidth = ctx.measureText(label).width;
+                    ctx.fillRect(x1, y1 - 20, textWidth + 10, 20);
+
+                    // 绘制标签文字
+                    ctx.fillStyle = 'white';
+                    ctx.fillText(label, x1 + 5, y1 - 5);
+                });
+
+                resultDiv.innerHTML = `
+                    <p>检测到 ${results.length} 个目标：</p >
+                    ${canvas.outerHTML}
+                `;
+            };
+
+            // 读取图片文件并显示
+            img.src = URL.createObjectURL(file);
+        }
+
+        // 生成随机颜色（用于不同类别）
+        function getColors(count) {
+            const colors = [];
+            for (let i = 0; i < count; i++) {
+                const hue = (i * 137) % 360; // 均匀分布色相
+                colors.push(`hsl(${hue}, 70%, 50%)`);
+            }
+            return colors;
+        }
+    </script>
+</body>
+</html>
